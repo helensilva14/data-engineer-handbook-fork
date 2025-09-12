@@ -5,7 +5,7 @@ from ..jobs.game_details_job import do_game_details_transformation
 
 GameDetail = namedtuple("GameDetail", "game_id team_id team_abbreviation team_city player_id player_name pts")
 
-def test_scd_generation(spark):
+def test_deduplication(spark):
     source_data = [
         GameDetail(1, 111, "GSW", "San Francisco", 22, "Player 22", "20"),
         GameDetail(1, 111, "GSW", "San Francisco", 22, "Player 22", "15"),
