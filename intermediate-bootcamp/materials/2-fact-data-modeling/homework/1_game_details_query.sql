@@ -36,6 +36,6 @@ SELECT
     "TO",
     pf,
     pts,
-    plus_minus) 
+    plus_minus 
 FROM ranked
 WHERE row_num = 1; 
