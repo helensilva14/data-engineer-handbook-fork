@@ -1,10 +1,10 @@
 WITH last_season AS (
     SELECT * FROM players
-    WHERE current_season = 1997
+    WHERE current_season = 1998
 
 ), this_season AS (
      SELECT * FROM player_seasons
-    WHERE season = 1998
+    WHERE season = 1999
 )
 INSERT INTO players
 SELECT
@@ -35,7 +35,7 @@ SELECT
              ELSE ls.scoring_class
          END as scoring_class,
          ts.season IS NOT NULL as is_active,
-         1998 AS current_season
+         1999 AS current_season
 
     FROM last_season ls
     FULL OUTER JOIN this_season ts
