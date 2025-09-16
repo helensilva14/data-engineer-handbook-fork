@@ -7,10 +7,8 @@ WITH game_details_augmented AS (
         COALESCE(gd.pts, 0) AS pts,
         CASE
             WHEN g.home_team_id = gd.team_id AND g.home_team_wins = 1
-                THEN 1
-            WHEN g.home_team_id = gd.team_id AND g.home_team_wins = 0
-                THEN 0
-            ELSE 0
+                THEN True
+            ELSE False
         END AS team_won
     FROM game_details gd
     JOIN games g ON gd.game_id = g.game_id
@@ -30,7 +28,7 @@ SELECT
     COALESCE(team, '(overall)') as team,
     COALESCE(CAST(season AS TEXT), '(overall)') as season,
     SUM(pts) as total_points,
-    SUM(team_won) as total_wins,
+    SUM(CASE WHEN team_won IS TRUE THEN 1 ELSE 0 END) as total_wins,
     COUNT(*) as total_games
 FROM game_details_augmented
 GROUP BY GROUPING SETS (
