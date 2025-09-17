@@ -1,4 +1,4 @@
-CREATE TABLE game_details_dashboard AS
+CREATE TEMP TABLE IF NOT EXISTS game_details_dashboard AS
 WITH game_details_augmented AS (
     SELECT
         gd.game_id AS game_id,
@@ -10,7 +10,7 @@ WITH game_details_augmented AS (
             WHEN g.home_team_id = gd.team_id AND g.home_team_wins = 1
                 THEN TRUE
             WHEN g.visitor_team_id = gd.team_id AND g.home_team_wins = 0
-                THEN FALSE
+                THEN TRUE
             ELSE FALSE
         END AS team_won
     FROM game_details gd
