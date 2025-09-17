@@ -1,26 +1,25 @@
-WITH yesterday AS (
-    SELECT * FROM players
-    WHERE current_season = 1998
+WITH player_activity AS (
+  SELECT player_name, season, 1 AS active
+  FROM player_seasons
+  GROUP BY player_name, season
 ),
-today AS (
-    SELECT * FROM players
-    WHERE current_season = 1999
+timeline AS (
+  SELECT
+    player_name,
+    season,
+    COALESCE(active, 0) AS active,
+    LAG(COALESCE(active, 0)) OVER (PARTITION BY player_name ORDER BY season) AS prev_active
+  FROM player_activity
 )
-SELECT 
-    COALESCE(t.player_name, y.player_name) AS player_name,
-    CASE
-        WHEN y.player_name IS NULL 
-            THEN 'New'
-        WHEN y.is_active IS TRUE AND t.player_name IS NULL
-            THEN 'Retired'
-        WHEN y.is_active IS TRUE AND t.player_name IS NOT NULL
-            THEN 'Continued Playing'
-        WHEN y.is_active IS FALSE AND t.player_name IS NOT NULL 
-            THEN 'Returned from Retirement'
-        ELSE 'Stayed Retired'
-    END 
-        AS player_status,
-    COALESCE(t.current_season, y.current_season) as current_season
-FROM today t
-FULL OUTER JOIN yesterday y
-ON t.player_name = y.player_name;
+SELECT
+  player_name,
+  season,
+  CASE
+    WHEN prev_active IS NULL AND active = 1 THEN 'New'
+    WHEN prev_active = 1 AND active = 0 THEN 'Retired'
+    WHEN prev_active = 1 AND active = 1 THEN 'Continued Playing'
+    WHEN prev_active = 0 AND active = 1 THEN 'Returned from Retirement'
+    WHEN prev_active = 0 AND active = 0 THEN 'Stayed Retired'
+  END AS player_status
+FROM timeline
+ORDER BY season, player_name;
