@@ -38,17 +38,24 @@ def create_processed_events_source_kafka(t_env):
     return table_name
 
 
-def create_result_sink_print(t_env):
-    table_name = "session_results_print"
+def create_sessionized_events_sink_postgres(t_env):
+    table_name = "sessionized_events"
     sink_ddl = f"""
         CREATE TABLE {table_name} (
+            session_id STRING,
             session_start TIMESTAMP(3),
             session_end TIMESTAMP(3),
             ip VARCHAR,
             host VARCHAR,
-            event_count BIGINT
+            event_count BIGINT,
+            PRIMARY KEY (session_id) NOT ENFORCED
         ) WITH (
-            'connector' = 'print'
+            'connector' = 'jdbc',
+            'url' = '{os.environ.get("POSTGRES_URL")}',
+            'table-name' = '{table_name}',
+            'username' = '{os.environ.get("POSTGRES_USER", "postgres")}',
+            'password' = '{os.environ.get("POSTGRES_PASSWORD", "postgres")}',
+            'driver' = 'org.postgresql.Driver'
         );
     """
     t_env.execute_sql(sink_ddl)
@@ -58,7 +65,7 @@ def create_result_sink_print(t_env):
 def log_sessionization():
     # Set up the execution environment
     env = StreamExecutionEnvironment.get_execution_environment()
-    env.enable_checkpointing(10)
+    env.enable_checkpointing(10_000) # every 10 seconds 
     env.set_parallelism(3)
 
     # Set up the table environment
@@ -69,33 +76,33 @@ def log_sessionization():
         # Create Kafka table
         source_table = create_processed_events_source_kafka(t_env)
         # Create the sink table
-        sink_table = create_result_sink_print(t_env)
+        sink_table = create_sessionized_events_sink_postgres(t_env)
 
-        # Apply a session window to the data, grouped by IP and host
-        session_table = t_env \
-            .from_path(source_table) \
-            .window(
-                Session.with_gap(lit(5).minutes).on(col("window_timestamp")).alias("w")
-            ).group_by(
-                col("w"),
-                col("ip"),
-                col("host")
-            ) \
-            .select(
-                # Get the session start, end and the count of events in the session
-                col("w").start.alias("session_start"),
-                col("w").end.alias("session_end"),
-                col("ip"),
-                col("host"),
-                col("ip").count.alias("event_count")
-            )
+        # Apply a session window grouped by IP and host        
+        session_sql = f"""
+            SELECT
+                MD5(CONCAT_WS('-', ip, host, 
+                    CAST(SESSION_START(window_timestamp, INTERVAL '5' MINUTE) AS STRING))) AS session_id,
+                SESSION_START(window_timestamp, INTERVAL '5' MINUTE) AS session_start,
+                SESSION_END(window_timestamp, INTERVAL '5' MINUTE) AS session_end,
+                ip,
+                host,
+                COUNT(*) AS event_count
+            FROM {source_table}
+            GROUP BY
+                SESSION(window_timestamp, INTERVAL '5' MINUTE),
+                ip,
+                host
+        """
         
+        # Execute the SQL query
+        session_table = t_env.sql_query(session_sql)
+
         # Insert the results into the sink table
-        # This will trigger the streaming job execution
-        session_table.execute_insert(sink_table)
+        session_table.execute_insert(sink_table).wait()
 
     except Exception as e:
-        print("Writing records from Kafka to sink failed:", str(e))
+        print("Writing records from Kafka to Postgres failed:", str(e))
 
 
 if __name__ == '__main__':
