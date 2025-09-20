@@ -2,8 +2,6 @@ import os
 
 from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.table import EnvironmentSettings, StreamTableEnvironment
-from pyflink.table.expressions import lit, col
-from pyflink.table.window import Session
 
 
 def create_processed_events_source_kafka(t_env):
@@ -14,13 +12,12 @@ def create_processed_events_source_kafka(t_env):
     source_ddl = f"""
         CREATE TABLE {table_name} (
             ip VARCHAR,
-            event_time VARCHAR,
+            event_time TIMESTAMP_LTZ(3),
             referrer VARCHAR,
             host VARCHAR,
             url VARCHAR,
             geodata VARCHAR,
-            window_timestamp AS TO_TIMESTAMP(event_time, '{pattern}'),
-            WATERMARK FOR window_timestamp AS window_timestamp - INTERVAL '15' SECOND
+            WATERMARK FOR event_time AS event_time - INTERVAL '15' SECOND
         ) WITH (
             'connector' = 'kafka',
             'properties.bootstrap.servers' = '{os.environ.get('KAFKA_URL')}',
@@ -31,7 +28,8 @@ def create_processed_events_source_kafka(t_env):
             'properties.sasl.jaas.config' = 'org.apache.flink.kafka.shaded.org.apache.kafka.common.security.plain.PlainLoginModule required username=\"{kafka_key}\" password=\"{kafka_secret}\";',
             'scan.startup.mode' = 'latest-offset',
             'properties.auto.offset.reset' = 'latest',
-            'format' = 'json'
+            'format' = 'json',
+            'json.timestamp-format.standard' = 'ISO-8601'
         );
     """
     t_env.execute_sql(source_ddl)
@@ -81,16 +79,20 @@ def log_sessionization():
         # Apply a session window grouped by IP and host        
         session_sql = f"""
             SELECT
-                MD5(CONCAT_WS('-', ip, host, 
-                    CAST(SESSION_START(window_timestamp, INTERVAL '5' MINUTE) AS STRING))) AS session_id,
-                SESSION_START(window_timestamp, INTERVAL '5' MINUTE) AS session_start,
-                SESSION_END(window_timestamp, INTERVAL '5' MINUTE) AS session_end,
+                MD5(CONCAT_WS('-', 
+                    COALESCE(ip,''), 
+                    COALESCE(host,''), 
+                    CAST(SESSION_START(event_time, INTERVAL '5' MINUTE) AS STRING), 
+                    CAST(SESSION_END(event_time, INTERVAL '5' MINUTE) AS STRING))
+                ) AS session_id,
+                SESSION_START(event_time, INTERVAL '5' MINUTE) AS session_start,
+                SESSION_END(event_time, INTERVAL '5' MINUTE) AS session_end,
                 ip,
                 host,
                 COUNT(*) AS event_count
             FROM {source_table}
             GROUP BY
-                SESSION(window_timestamp, INTERVAL '5' MINUTE),
+                SESSION(event_time, INTERVAL '5' MINUTE),
                 ip,
                 host
         """

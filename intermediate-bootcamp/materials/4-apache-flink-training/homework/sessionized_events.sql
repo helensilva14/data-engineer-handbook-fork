@@ -9,13 +9,17 @@ CREATE TABLE public.sessionized_events (
 );
 
 -- What is the average number of web events of a session from a user on Tech Creator?
-SELECT host, AVG(event_count) AS avg_events_per_session
+SELECT ROUND(AVG(event_count), 2) AS avg_events_per_session
 FROM public.sessionized_events
-WHERE host LIKE '%techcreator%'
-GROUP BY host;
+WHERE host LIKE '%techcreator%';
+-- Output: 2.17
 
 -- Compare results between different hosts (zachwilson.techcreator.io, zachwilson.tech, lulu.techcreator.io)
-SELECT host, AVG(event_count) AS avg_events_per_session
+SELECT host, ROUND(AVG(event_count), 2) AS avg_events_per_session
 FROM public.sessionized_events
 WHERE host IN ('zachwilson.techcreator.io','zachwilson.tech','lulu.techcreator.io')
-GROUP BY host;
+GROUP BY host
+ORDER BY host;
+-- Output:
+-- host | avg_events_per_session
+-- zachwilson.techcreator.io | 0.51
